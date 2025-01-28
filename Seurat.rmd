@@ -1,0 +1,90 @@
+---
+title: "E15.5"
+author: "ChaiLab"
+date: "12/11/2024"
+output: html_document
+---
+```{r}
+library(Seurat)
+library(magrittr)
+library(dplyr)
+library(stringr)
+library(ggplot2)
+library(cowplot)
+library(patchwork)
+```
+
+```{r}
+#load data library 
+E15.5.data <- Read10X_h5(file = ".../E15.5_A/filtered_feature_bc_matrix.h5")
+
+#create seurat object
+E15.5 <- CreateSeuratObject(counts = E15.5.data, project = "E15.5_A")
+```
+
+```{r}
+E15.5[["percent.mt"]] <- PercentageFeatureSet(E15.5, pattern = "^mt-")
+
+VlnPlot(E15.5, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3)
+```
+
+```{r}
+plot1 <- FeatureScatter(E15.5, feature1 = "nCount_RNA", feature2 = "percent.mt")
+plot2 <- FeatureScatter(E15.5, feature1 = "nCount_RNA", feature2 = "nFeature_RNA")
+CombinePlots(plots = list(plot1, plot2))
+```
+
+```{r}
+E15.5 <- subset(E15.5, subset = nFeature_RNA > 200 & nFeature_RNA < 7500 & percent.mt < 5)
+E15.5 <- NormalizeData(E15.5, normalization.method = "LogNormalize", scale.factor = 10000)
+E15.5 <- FindVariableFeatures(E15.5, selection.method = "vst", nfeatures = 2000)
+all.genes <- rownames(E15.5)
+E15.5 <- ScaleData(E15.5, features = all.genes)
+```
+
+```{r}
+#load ccgenes 
+mouse_cell_cycle_genes <- readRDS(".../mouse_cell_cycle_genes.rds")
+s.genes <- mouse_cell_cycle_genes[[1]]
+g2m.genes <- mouse_cell_cycle_genes[[2]]
+```
+
+```{r}
+E15.5 <- CellCycleScoring(E15.5, s.features = s.genes, g2m.features = g2m.genes, set.ident = TRUE)
+E15.5 <- RunPCA(E15.5, features = c(s.genes, g2m.genes))
+p1 <- DimPlot(E15.5)
+E15.5 <- ScaleData(E15.5, vars.to.regress = c("S.Score", "G2M.Score"), features = rownames(E15.5))
+E15.5 <- RunPCA(E15.5, features = VariableFeatures(E15.5), nfeatures.print = 10)
+E15.5 <- RunPCA(E15.5, features = c(s.genes, g2m.genes))
+p2 <- DimPlot(E15.5)
+
+p1+p2
+```
+
+```{r}
+E15.5 <- RunPCA(E15.5, features = VariableFeatures(object = E15.5))
+ElbowPlot(E15.5)
+```
+
+```{r}
+E15.5 <- FindNeighbors(E15.5, dims = 1:20)
+E15.5 <- FindClusters(E15.5, resolution = 0.5)
+```
+
+```{r}
+E15.5 <- RunUMAP(E15.5, dims = 1:20)
+```
+
+
+```{r}
+DimPlot(E15.5, reduction = "umap", label = T, label.size = 4, group.by = "RNA_snn_res.0.5")
+```
+
+```{r}
+#Save seurat object
+saveRDS(E15.5, file = ".../E15.5_A.rds")
+```
+
+```{r}
+DimPlot(E15.5, reduction = "umap", group.by = "Phase")
+```
